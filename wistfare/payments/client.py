@@ -2,10 +2,70 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import json
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from wistfare.client import Wistfare
+    from wistfare.core.client import Wistfare
+
+
+# ── Webhooks ──
+
+WebhookEvent = Literal[
+    "collection.completed",
+    "collection.failed",
+    "disbursement.completed",
+    "disbursement.failed",
+]
+
+WebhookTransactionType = Literal["collection", "disbursement"]
+
+
+@dataclass(frozen=True)
+class WebhookPayload:
+    """Payload delivered to your webhook endpoint."""
+
+    event: WebhookEvent
+    transaction_id: str
+    transaction_type: WebhookTransactionType
+    status: str
+    amount: str
+    fee_amount: str
+    net_amount: str
+    currency: str
+    business_wallet_id: str
+    customer_phone: str
+    customer_name: str
+    payment_method: str
+    reference_id: str
+    description: str
+    failure_reason: str
+    timestamp: str
+
+
+def parse_webhook_payload(body: str | bytes) -> WebhookPayload:
+    """Parse a raw webhook request body into a WebhookPayload."""
+    raw = body if isinstance(body, str) else body.decode("utf-8")
+    data = json.loads(raw)
+    return WebhookPayload(
+        event=data["event"],
+        transaction_id=data["transaction_id"],
+        transaction_type=data["transaction_type"],
+        status=data["status"],
+        amount=data["amount"],
+        fee_amount=data["fee_amount"],
+        net_amount=data["net_amount"],
+        currency=data["currency"],
+        business_wallet_id=data["business_wallet_id"],
+        customer_phone=data["customer_phone"],
+        customer_name=data["customer_name"],
+        payment_method=data["payment_method"],
+        reference_id=data["reference_id"],
+        description=data["description"],
+        failure_reason=data.get("failure_reason", ""),
+        timestamp=data["timestamp"],
+    )
 
 
 class PaymentsClient:
@@ -16,61 +76,84 @@ class PaymentsClient:
 
     # ── Fee Management ──
 
-    def set_fee_config(
-        self,
-        *,
-        business_id: str,
-        transaction_type: str,
-        fee_model: str,
-        percentage_rate: str | None = None,
-        flat_amount: str | None = None,
-        min_fee: str | None = None,
-        max_fee: str | None = None,
-        currency: str = "RWF",
-    ) -> dict[str, Any]:
-        """Configure fees for a business."""
-        return self._client.post(
-            "/v1/fees",
-            business_id=business_id,
-            transaction_type=transaction_type,
-            fee_model=fee_model,
-            percentage_rate=percentage_rate,
-            flat_amount=flat_amount,
-            min_fee=min_fee,
-            max_fee=max_fee,
-            currency=currency,
-        )
-
     def get_fee_config(self, business_id: str, transaction_type: str) -> dict[str, Any]:
         """Get fee configuration for a business and transaction type."""
         return self._client.get(f"/v1/fees/{business_id}", transaction_type=transaction_type)
 
-    def list_fee_configs(self, business_id: str, **pagination: Any) -> dict[str, Any]:
+    def list_fee_configs(
+        self,
+        business_id: str,
+        *,
+        page: int | None = None,
+        per_page: int | None = None,
+    ) -> dict[str, Any]:
         """List all fee configs for a business."""
-        return self._client.get("/v1/fees", business_id=business_id, **pagination)
+        params: dict[str, Any] = {"business_id": business_id}
+        if page is not None:
+            params["page"] = page
+        if per_page is not None:
+            params["per_page"] = per_page
+        return self._client.get("/v1/fees", **params)
 
-    def delete_fee_config(self, fee_config_id: str) -> None:
-        """Delete a fee config."""
-        self._client.delete(f"/v1/fees/{fee_config_id}")
+    # ── Collections ──
 
-    def calculate_fee(
+    def initiate_collection(
         self,
         *,
         business_id: str,
+        wallet_id: str | None = None,
+        customer_phone: str,
         amount: str,
-        transaction_type: str,
-        currency: str = "RWF",
+        payment_method: str,
+        currency: str | None = None,
+        description: str | None = None,
+        reference_id: str | None = None,
+        payment_request_id: str | None = None,
     ) -> dict[str, Any]:
-        """Calculate fee for a given amount."""
-        return self._client.post(
-            "/v1/fees/calculate",
-            business_id=business_id,
-            amount=amount,
-            transaction_type=transaction_type,
-            currency=currency,
-        )
+        """Initiate a mobile money collection from a customer."""
+        payload: dict[str, Any] = {
+            "business_id": business_id,
+            "wallet_id": wallet_id,
+            "customer_phone": customer_phone,
+            "amount": amount,
+            "payment_method": payment_method,
+            "currency": currency,
+            "description": description,
+            "reference_id": reference_id,
+            "payment_request_id": payment_request_id,
+        }
+        return self._client.post("/v1/collections", **payload)
 
-    # ── Payment Requests (QR / Links) ──
+    def list_collections(
+        self,
+        *,
+        business_id: str | None = None,
+        reference_id: str | None = None,
+        status: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        page: int | None = None,
+        per_page: int | None = None,
+    ) -> dict[str, Any]:
+        """List collections with optional filters."""
+        params: dict[str, Any] = {}
+        if business_id is not None:
+            params["business_id"] = business_id
+        if reference_id is not None:
+            params["reference_id"] = reference_id
+        if status is not None:
+            params["status"] = status
+        if from_date is not None:
+            params["from_date"] = from_date
+        if to_date is not None:
+            params["to_date"] = to_date
+        if page is not None:
+            params["page"] = page
+        if per_page is not None:
+            params["per_page"] = per_page
+        return self._client.get("/v1/collections", **params)
+
+    # ── Payment Requests ──
 
     def create_payment_request(
         self,
@@ -79,12 +162,9 @@ class PaymentsClient:
         wallet_id: str,
         request_type: str,
         amount: str,
-        currency: str = "RWF",
+        currency: str | None = None,
+        reference_id: str | None = None,
         description: str | None = None,
-        customer_phone: str | None = None,
-        customer_name: str | None = None,
-        max_uses: int | None = None,
-        expires_at: str | None = None,
     ) -> dict[str, Any]:
         """Create a payment request (QR code or payment link)."""
         return self._client.post(
@@ -94,61 +174,9 @@ class PaymentsClient:
             request_type=request_type,
             amount=amount,
             currency=currency,
+            reference_id=reference_id,
             description=description,
-            customer_phone=customer_phone,
-            customer_name=customer_name,
-            max_uses=max_uses,
-            expires_at=expires_at,
         )
-
-    def get_payment_request(self, request_id: str) -> dict[str, Any]:
-        """Get a payment request by ID."""
-        return self._client.get(f"/v1/payment-requests/{request_id}")
-
-    def list_payment_requests(self, business_id: str, **pagination: Any) -> dict[str, Any]:
-        """List payment requests for a business."""
-        return self._client.get("/v1/payment-requests", business_id=business_id, **pagination)
-
-    def cancel_payment_request(self, request_id: str) -> dict[str, Any]:
-        """Cancel a payment request."""
-        return self._client.post(f"/v1/payment-requests/{request_id}/cancel")
-
-    # ── Collections ──
-
-    def initiate_collection(
-        self,
-        *,
-        business_id: str,
-        wallet_id: str,
-        customer_phone: str,
-        amount: str,
-        payment_method: str,
-        currency: str = "RWF",
-        description: str | None = None,
-        external_id: str | None = None,
-    ) -> dict[str, Any]:
-        """Initiate a mobile money collection from a customer."""
-        return self._client.post(
-            "/v1/collections",
-            business_id=business_id,
-            wallet_id=wallet_id,
-            customer_phone=customer_phone,
-            amount=amount,
-            payment_method=payment_method,
-            currency=currency,
-            description=description,
-            external_id=external_id,
-        )
-
-    # ── Transactions ──
-
-    def get_transaction(self, transaction_id: str) -> dict[str, Any]:
-        """Get a payment transaction by ID."""
-        return self._client.get(f"/v1/transactions/{transaction_id}")
-
-    def list_transactions(self, business_id: str, **filters: Any) -> dict[str, Any]:
-        """List payment transactions with optional filters."""
-        return self._client.get("/v1/transactions", business_id=business_id, **filters)
 
     # ── Disbursements ──
 
@@ -160,10 +188,9 @@ class PaymentsClient:
         amount: str,
         destination_type: str,
         destination_ref: str,
-        destination_name: str | None = None,
-        currency: str = "RWF",
+        currency: str | None = None,
         description: str | None = None,
-        idempotency_key: str,
+        reference_id: str | None = None,
     ) -> dict[str, Any]:
         """Initiate a disbursement (payout) to a mobile money number."""
         return self._client.post(
@@ -173,16 +200,7 @@ class PaymentsClient:
             amount=amount,
             destination_type=destination_type,
             destination_ref=destination_ref,
-            destination_name=destination_name,
             currency=currency,
             description=description,
-            idempotency_key=idempotency_key,
+            reference_id=reference_id,
         )
-
-    def get_disbursement(self, disbursement_id: str) -> dict[str, Any]:
-        """Get a disbursement by ID."""
-        return self._client.get(f"/v1/disbursements/{disbursement_id}")
-
-    def list_disbursements(self, business_id: str, **pagination: Any) -> dict[str, Any]:
-        """List disbursements for a business."""
-        return self._client.get("/v1/disbursements", business_id=business_id, **pagination)

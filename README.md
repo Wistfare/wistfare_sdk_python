@@ -36,7 +36,7 @@ print(collection["transaction_id"], collection["status"])
 ```python
 wf = Wistfare(
     api_key="wf_live_xxx",                       # Required — wf_live_* or wf_test_*
-    base_url="https://api.wistfare.com",         # Optional
+    base_url="https://api-production.wistfare.com",         # Optional
     timeout=30.0,                                 # Optional — seconds (default: 30)
     max_retries=2,                                # Optional — retries on 5xx/network errors
 )

@@ -1,10 +1,10 @@
-"""Wistfare Python SDK."""
+"""Wistfare Core — HTTP client, authentication, errors, and shared types."""
 
 from wistfare.core.client import Wistfare
 from wistfare.core.errors import (
     WistfareError,
     AuthenticationError,
-    PermissionError as WistfarePermissionError,
+    PermissionError,
     NotFoundError,
     ValidationError,
     RateLimitError,
@@ -16,12 +16,11 @@ from wistfare.core.types import (
     ContactInfo,
 )
 
-__version__ = "0.1.0"
 __all__ = [
     "Wistfare",
     "WistfareError",
     "AuthenticationError",
-    "WistfarePermissionError",
+    "PermissionError",
     "NotFoundError",
     "ValidationError",
     "RateLimitError",

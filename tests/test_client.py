@@ -42,7 +42,7 @@ class TestConstructor:
         assert c.base_url == "https://example.com"
 
     def test_default_base_url(self, client):
-        assert client.base_url == "https://api.wistfare.com"
+        assert client.base_url == "https://api-production.wistfare.com"
 
     def test_default_timeout(self, client):
         assert client.timeout == 30.0
