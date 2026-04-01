@@ -27,21 +27,37 @@ class WebhookPayload:
     """Payload delivered to your webhook endpoint."""
 
     event: WebhookEvent
+    """One of the webhook event types (e.g. ``collection.completed``, ``payment.failed``)."""
     transaction_id: str
+    """Unique Wistfare transaction identifier."""
     transaction_type: WebhookTransactionType
+    """``collection`` or ``disbursement``."""
     status: str
+    """Terminal status: ``pending``, ``completed``, ``failed``, or ``expired``."""
     amount: str
+    """Original transaction amount."""
     fee_amount: str
+    """Fee deducted from the transaction."""
     net_amount: str
+    """Amount after fees."""
     currency: str
+    """Currency code (e.g. ``RWF``)."""
     business_wallet_id: str
+    """The business wallet involved."""
     customer_phone: str
+    """Customer phone number."""
     customer_name: str
+    """Customer display name (may be empty)."""
     payment_method: str
+    """Payment rail used (e.g. ``mtn_momo``, ``airtel_money``)."""
     reference_id: str
+    """Your original reference ID passed when creating the collection or disbursement."""
     description: str
+    """Human-readable description."""
     failure_reason: str
+    """Empty on success; contains the error message on failure."""
     timestamp: str
+    """ISO 8601 timestamp of the event."""
 
 
 def parse_webhook_payload(body: str | bytes) -> WebhookPayload:
